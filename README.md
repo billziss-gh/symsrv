@@ -1,4 +1,4 @@
-# SymSrv - Use GitHub as a symbol server for Debugging Tools for Windows
+# SymSrv &middot; GitHub as a symbol server for Debugging Tools for Windows
 
 This project describes a workflow and contains tools that make it possible to use a Git repository hosting service (e.g. GitHub) as a debugging symbol and source server that is usable by the Debugging Tools for Windows.
 
@@ -79,7 +79,7 @@ For this purpose the `symadd.ps1` utility does the following:
 
 For example, the PDB file `winfsp-x64.sys.pdb` is one of the products of the WinFsp build. Once published it may end up in a location such as `https://github.com/billziss-gh/winfsp.sym/raw/test/sym/winfsp-x64.sys.pdb/177B495A386D458FB3697EE3E3EC04C91/winfsp-x64.sys.pdb`; this is a location that the Debugging Tools know how to find once the symbol path has been set appropriately.
 
-The published PDB file will also contain relocation information for the associated source files, so the source file `C:\Users\billziss\Projects\winfsp\src\sys\driver.c` may be redirected to `https://github.com/billziss-gh/winfsp/raw/368855676ac602b426c75ae6d7d3a8a47fcc5889/src/sys/driver.c`. Notice the use of the commit number to specify the file that ensures that the correct version of the source will be used!
+The published PDB file will also contain relocation information for the associated source files, so the source file `C:\Users\billziss\Projects\winfsp\src\sys\driver.c` may be redirected to `https://github.com/billziss-gh/winfsp/raw/368855676ac602b426c75ae6d7d3a8a47fcc5889/src/sys/driver.c`. Notice the use of the commit number to ensure that the correct version of the source will be used!
 
 ## Requirements
 
