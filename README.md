@@ -1,4 +1,4 @@
-# SymSrv - Use GitHub as a debugging symbol server
+# SymSrv - Use GitHub as a symbol server for Debugging Tools for Windows
 
 This project describes a workflow and contains tools that make it possible to use a Git repository hosting service (e.g. GitHub) as a debugging symbol and source server that is usable by the Debugging Tools for Windows.
 
