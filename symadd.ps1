@@ -126,11 +126,17 @@ try {
             $tracked.ContainsKey($_.Substring("$topdir".Length + 1).Replace("\", "/"))
         }
 
-        $text = "VERSION=2`nSRCSRVTRG=$raworig$commit/%var2%`n"
+        $text = ""
+        $text += "SRCSRV: ini ------------------------------------------------`r`n"
+        $text += "VERSION=2`r`n"
+        $text += "SRCSRV: variables ------------------------------------------`r`n"
+        $text += "SRCSRVTRG=$raworig$commit/%var2%`r`n"
+        $text += "SRCSRV: source files ---------------------------------------`r`n"
         foreach ($source in $sources) {
             $trim = $source.Substring("$topdir".Length + 1).Replace("\", "/")
-            $text += "$source*$trim`n"
+            $text += "$source*$trim`r`n"
         }
+        $text += "SRCSRV: end ------------------------------------------------`r`n"
 
         [System.IO.File]::WriteAllText($temp, $text)
         & $pdbstr -w -p:$path -i:$temp -s:srcsrv
