@@ -28,11 +28,18 @@ param (
 function OriginToRaw ($origin) {
     $result = "$origin"
 
-    # GitHub rules
     if ($result.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
         $result = $result.Substring(0, $result.Length - 4)
     }
-    $result += "/raw/"
+
+    if ($result.StartsWith("https://github.com/", [StringComparison]::OrdinalIgnoreCase) -or `
+        $result.StartsWith("https://bitbucket.org/", [StringComparison]::OrdinalIgnoreCase)) {
+        $result += "/raw/"
+    } elseif ($result.StartsWith("https://gitlab.com/", [StringComparison]::OrdinalIgnoreCase)) {
+        $result += "/-/raw/"
+    } else {
+        $result += "/raw/"
+    }
 
     return $result
 }
