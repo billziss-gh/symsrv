@@ -18,43 +18,79 @@
 # .LINK
 # https://github.com/billziss-gh/symsrv
 
-
 param (
     [string]$GitDir,
     [string]$SymDir,
     [Parameter(Position=0, ValueFromRemainingArguments)][string[]]$PdbPaths
 )
 
-function OriginToRaw ($origin) {
-    $result = "$origin"
-
-    if ($result.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
-        $result = $result.Substring(0, $result.Length - 4)
+function Get-RepositoryInformation ($path) {
+    if (-not (Test-Path $path)) {
+        return $null
     }
-
-    if ($result.StartsWith("https://github.com/", [StringComparison]::OrdinalIgnoreCase) -or `
-        $result.StartsWith("https://bitbucket.org/", [StringComparison]::OrdinalIgnoreCase)) {
-        $result += "/raw/"
-    } elseif ($result.StartsWith("https://gitlab.com/", [StringComparison]::OrdinalIgnoreCase)) {
-        $result += "/-/raw/"
-    } else {
-        $result += "/raw/"
+    for ($topdir = $path; $topdir; $topdir = Split-Path -Parent $topdir) {
+        if (Test-Path "$topdir/.git" -PathType Container) {
+            break
+        }
     }
-
-    return $result
+    if (-not $topdir) {
+        return $null
+    }
+    $topdir = "$(Resolve-Path $topdir)"
+    $origin = git -C $topdir config --local remote.origin.url 2>$null
+    $commit = git -C $topdir rev-parse HEAD 2>$null
+    $tracked = @{}
+    git -C $topdir ls-tree --full-tree --name-only -r HEAD 2>$null | ForEach-Object { $tracked[$_]++ }
+    $raworigin = $origin
+    if ($raworigin) {
+        if ($raworigin.EndsWith(".git", [StringComparison]::OrdinalIgnoreCase)) {
+            $raworigin = $raworigin.Substring(0, $raworigin.Length - 4)
+        }
+        if ($raworigin.StartsWith("https://github.com/", [StringComparison]::OrdinalIgnoreCase) -or `
+            $raworigin.StartsWith("https://bitbucket.org/", [StringComparison]::OrdinalIgnoreCase)) {
+            $raworigin += "/raw/"
+        } elseif ($raworigin.StartsWith("https://gitlab.com/", [StringComparison]::OrdinalIgnoreCase)) {
+            $raworigin += "/-/raw/"
+        } else {
+            $raworigin += "/raw/"
+        }
+    }
+    return [PSCustomObject]@{
+        TopDir = $topdir
+        Origin = $origin
+        Commit = $commit
+        Tracked = $tracked
+        RawOrigin = $raworigin
+    }
 }
 
-if (-not $PdbPaths) {
+function Get-CachedRepositoryInformation ($repos, $path) {
+    for ($topdir = $path; $topdir; $topdir = Split-Path -Parent $topdir) {
+        if ($repos.ContainsKey($topdir)) {
+            return $repos[$topdir]
+        }
+    }
+    $info = Get-RepositoryInformation $path
+    if ($info) {
+        $repos[$info.TopDir] = $info
+    }
+    return $info
+}
+
+$paths = @()
+foreach ($path in $PdbPaths) {
+    $paths += Get-ChildItem $path -Recurse -Include *.pdb | Select-Object -ExpandProperty FullName
+}
+$paths = @($paths | Select-Object -Unique)
+if (-not $paths) {
+    [Console]::Error.WriteLine("Cannot find any PDB files.")
     exit 1
 }
 
 if (-not $GitDir) {
-    $GitDir = $PdbPaths[0]
+    $GitDir = Split-Path -Parent $paths[0]
     if (-not (Test-Path $GitDir -PathType Container)) {
-        $GitDir = Split-Path -Parent $PdbPaths[0]
-        if (-not $GitDir) {
-            $GitDir = "."
-        }
+        $GitDir = "."
     }
 }
 
@@ -76,50 +112,31 @@ $KitRoot = try {
     [Console]::Error.WriteLine("Cannot determine Windows Kit installation path.")
     exit 1
 }
-
 $symstore = Join-Path $KitRoot "Debuggers/x64/symstore.exe"
 $srctool = Join-Path $KitRoot "Debuggers/x64/srcsrv/srctool.exe"
 $pdbstr = Join-Path $KitRoot "Debuggers/x64/srcsrv/pdbstr.exe"
 
-$topdir = git -C $GitDir rev-parse --show-toplevel 2>$null
-if (-not $topdir) {
+$repos = @{}
+$info = Get-CachedRepositoryInformation $repos $GitDir
+if (-not $info) {
     [Console]::Error.WriteLine("Cannot get repo at `"$GitDir`"")
     exit 1
 }
-
-$topdir = Resolve-Path $topdir
-$origin = git -C $topdir config --local remote.origin.url 2>$null
-$commit = git -C $topdir rev-parse HEAD 2>$null
-if (-not $origin -or -not $commit) {
-    [Console]::Error.WriteLine("Cannot get origin or commit from repo at `"$topdir`"")
+if (-not $info.Origin -or -not $info.Commit) {
+    [Console]::Error.WriteLine("Cannot get origin or commit from repo at `"$($info.TopDir)`"")
     exit 1
 }
 
-$paths = @()
-foreach ($path in $PdbPaths) {
-    $paths += Get-ChildItem $path -Recurse -Include *.pdb | Select-Object -ExpandProperty FullName
-}
-$paths = $paths | Select-Object -Unique
-if (-not $paths) {
-    [Console]::Error.WriteLine("Cannot find any PDB files.")
-    exit 1
-}
-
-$raworig = OriginToRaw $origin
-
-$tracked = @{}
-git -C $topdir ls-tree --full-tree --name-only -r HEAD 2>$null | ForEach-Object { $tracked[$_]++ }
-
-Write-Output "GitDir: $topdir"
-Write-Output "Origin: $origin"
-Write-Output "Commit: $commit"
+Write-Output "TopDir: $($info.TopDir)"
+Write-Output "Origin: $($info.Origin)"
+Write-Output "Commit: $($info.Commit)"
 Write-Output "SymDir: $SymDir"
 Write-Output ""
 
 $temp = New-TemporaryFile
 try {
     [System.IO.File]::WriteAllLines($temp, $paths)
-    & $symstore add /f "@$temp" /s $SymDir /t $origin /v $commit
+    & $symstore add /f "@$temp" /s $SymDir /t $info.Origin /v $info.Commit
 
     $id = Get-Content (Join-Path $SymDir "000Admin/lastid.txt")
     $xn = Get-Content (Join-Path $SymDir "000Admin/$id") | ConvertFrom-Csv -Header SymPath,OrigPath
@@ -128,20 +145,26 @@ try {
         $name = Split-Path -Parent $path
         $path = (Join-Path $SymDir "$path/$name")
 
-        $sources = & $srctool -r $path 2> $null | Where-Object {
-            $_.StartsWith($topdir, [StringComparison]::OrdinalIgnoreCase) -and `
-            $tracked.ContainsKey($_.Substring("$topdir".Length + 1).Replace("\", "/"))
-        }
-
         $text = ""
         $text += "SRCSRV: ini ------------------------------------------------`r`n"
         $text += "VERSION=2`r`n"
         $text += "SRCSRV: variables ------------------------------------------`r`n"
-        $text += "SRCSRVTRG=$raworig$commit/%var2%`r`n"
+        $text += "SRCSRVTRG=%var2%`r`n"
         $text += "SRCSRV: source files ---------------------------------------`r`n"
+        $sources = & $srctool -r $path 2> $null
         foreach ($source in $sources) {
-            $trim = $source.Substring("$topdir".Length + 1).Replace("\", "/")
-            $text += "$source*$trim`r`n"
+            if ($source.StartsWith($path)) {
+                continue
+            }
+            $cinfo = Get-CachedRepositoryInformation $repos $source
+            if (-not $cinfo) {
+                continue
+            }
+            $trim = $source.Substring($cinfo.TopDir.Length + 1).Replace("\", "/")
+            if (-not $cinfo.Tracked.ContainsKey($trim)) {
+                continue
+            }
+            $text += "$source*$($cinfo.RawOrigin)$($cinfo.Commit)/$trim`r`n"
         }
         $text += "SRCSRV: end ------------------------------------------------`r`n"
 
