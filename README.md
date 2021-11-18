@@ -1,6 +1,6 @@
-# SymSrv &middot; GitHub as a symbol server for Debugging Tools for Windows
+# SymSrv &middot; Use GitHub as symbol server for Debugging Tools for Windows
 
-This project describes a workflow and contains tools that make it possible to use a Git repository hosting service (e.g. GitHub) as a debugging symbol and source server that is usable by the Debugging Tools for Windows.
+This project describes a workflow and contains tools that make it possible to use a Git repository hosting service (such as GitHub, BitBucket or GitLab) as a debugging symbol and source server that is usable by the Debugging Tools for Windows.
 
 ## Recommended workflow
 
@@ -16,7 +16,7 @@ git submodule add https://github.com/billziss-gh/symsrv.git tools
 
 ### Symbol publishing
 
-Suppose that the build process of the `USER/REPO` repository places its output products (including debugging symbols) in the `build` subdirectory. We will be publishing those debugging symbols in the `sym` subdirectory of the `USER\REPO.sym` repository using the `symadd.ps1` command.
+Suppose that the build process of the `USER/REPO` repository produces debugging symbols that we wish to publish. We will be publishing those debugging symbols in the `sym` subdirectory of the `USER\REPO.sym` repository using the `symadd.ps1` command.
 
 Here is an example from the [WinFsp](https://github.com/billziss-gh/winfsp) project:
 
@@ -51,13 +51,15 @@ git push
 Suppose that symbols have been published in the `USER/REPO.sym` using the process described above. To use the symbols you simply need to add the following path to your debugging symbol path:
 
 ```
-https://github.com/USER/REPO/raw/BRANCH/sym
+GitHub:    https://github.com/USER/REPO.sym/raw/BRANCH/sym
+BitBucket: https://bitbucket.org/USER/REPO.sym/raw/BRANCH/sym
+GitLab:    https://gitlab.com/USER/REPO.sym/-/raw/BRANCH/sym
 ```
 
-For example, to enable the symbol and source servers with proper paths in WinDbg:
+For example, to enable symbol and source servers in WinDbg for WinFsp:
 
 ```
-.sympath+ https://github.com/USER/REPO/raw/BRANCH/sym
+.sympath+ https://github.com/billziss-gh/winfsp.sym/raw/test/sym
 .srcfix
 ```
 
@@ -67,15 +69,14 @@ Then upon hitting a breakpoint -- like magic! 🪄🪄🪄
 
 ## How it works
 
-The Debugging Tools for Windows have the capability to fetch symbols and sources from a variety of locations including HTTP servers. We exploit the fact that GitHub can serve raw files from a repository using HTTP and we setup our publishing repository in a manner as to be usable by the Debugging Tools.
+The Debugging Tools for Windows have the capability to fetch symbols and sources from a variety of locations including HTTP servers. We exploit the fact that hosting services can serve raw files from a repository using HTTP and we setup our publishing repository in a manner as to be usable by the Debugging Tools.
 
 For this purpose the `symadd.ps1` utility does the following:
 
-- Uses `git` to determine the repository and commit that the PDB files to be published are from.
 - Uses the [`symstore`](https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/symstore-command-line-options) utility to copy the PDB files to be published and place them in the appropriate file hierarchy.
 - Uses the [`srctool`](https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/the-srctool-utility) utility to extract a list of source files referenced by each copied PDB file.
-- Cross-references the listed source files with the files tracked by git in the repository where the PDB files cames from.
-- Uses the [`pdbstr`](https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/the-pdbstr-tool) utility to write a special [`srcsrv`](https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/language-specification-1) stream in each PDB file that contains relocation information for cross-referenced files.
+- Determines the listed source files that are tracked by Git in one of the supported hosting services.
+- Uses the [`pdbstr`](https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/the-pdbstr-tool) utility to write a special [`srcsrv`](https://docs.microsoft.com/en-us/windows-hardware/drivers/debugger/language-specification-1) stream in each PDB file that contains relocation information for any source files found.
 
 For example, the PDB file `winfsp-x64.sys.pdb` is one of the products of the WinFsp build. Once published it may end up in a location such as `https://github.com/billziss-gh/winfsp.sym/raw/test/sym/winfsp-x64.sys.pdb/177B495A386D458FB3697EE3E3EC04C91/winfsp-x64.sys.pdb`; this is a location that the Debugging Tools know how to find once the symbol path has been set appropriately.
 
