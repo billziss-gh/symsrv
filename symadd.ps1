@@ -21,6 +21,7 @@
 param (
     [string]$GitDir,
     [string]$SymDir,
+    [ValidateSet("Public", "Private")][string]$PdbKind,
     [Parameter(Position=0, ValueFromRemainingArguments)][string[]]$PdbPaths
 )
 
@@ -136,7 +137,17 @@ Write-Output ""
 $temp = New-TemporaryFile
 try {
     [System.IO.File]::WriteAllLines($temp, $paths)
-    & $symstore add /f "@$temp" /s $SymDir /t $info.Origin /v $info.Commit
+    switch ($PdbKind) {
+        "Public" {
+            & $symstore add /f "@$temp" /s $SymDir /t $info.Origin /v $info.Commit /z pub
+        }
+        "Private" {
+            & $symstore add /f "@$temp" /s $SymDir /t $info.Origin /v $info.Commit /z pri
+        }
+        default {
+            & $symstore add /f "@$temp" /s $SymDir /t $info.Origin /v $info.Commit
+        }
+    }
 
     $id = Get-Content (Join-Path $SymDir "000Admin/lastid.txt")
     $xn = Get-Content (Join-Path $SymDir "000Admin/$id") | ConvertFrom-Csv -Header SymPath,OrigPath
